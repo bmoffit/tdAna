@@ -1,6 +1,14 @@
-# Compile the fcat analysis.
+# Compile the TD analysis.
 # Bryan Moffit, August 2003
-# DEBUG=1
+
+DEBUG=1
+QUIET	?= 1
+#
+ifeq ($(QUIET),1)
+        Q = @
+else
+        Q =
+endif
 
 CXX = g++ -std=c++11
 OSNAME = Linux
@@ -15,10 +23,9 @@ ROOTLIBS = $(shell ${ROOTSYS}/bin/root-config --libs)
 ROOTGLIBS = $(shell ${ROOTSYS}/bin/root-config --glibs)
 ROOTINC   = $(shell ${ROOTSYS}/bin/root-config --incdir)
 
-CMSGLIBS = -L${CODA}//Linux-x86_64/lib -lcmsg -lcmsgxx -lcmsgRegex -lieee \
-	-lrt -lpthread -lm -lnsl -lresolv -ldl
+OTHERLIBS = -lieee -lrt -lpthread -lm -lnsl -lresolv -ldl
 
-LIBS = $(ROOTLIBS) $(ROOTGLIBS) $(CODALIBS) $(CMSGLIBS)
+LIBS = $(ROOTLIBS) $(ROOTGLIBS) $(CODALIBS) $(OTHERLIBS)
 
 INCLUDES      = -I$(ROOTINC) \
 		-I${CODAINC}
@@ -30,38 +37,35 @@ else
 CXXFLAGS += -O3
 endif
 
-all: fcat libfcat.so
+SRC	:= $(wildcard *.C)
+OBJ	= $(SRC:.C=.o)
+SRC	:= $(filter-out AnaDict.C, $(SRC))
+DEPS	= $(SRC:.C=.d)
+HDRS	= $(wildcard *.h)
 
-fcat: main.o FCATAnalysis.o FCATcmsg.o FCATAnalysis.h AnaDict.o
-	$(CXX) $(CXXFLAGS) -o $@ main.o FCATAnalysis.o FCATcmsg.o  AnaDict.o $(LIBS)
-	@echo
-	mv fcat ../
+all: tdana
 
-main.o: main.C 
-	$(CXX) $(CXXFLAGS) -c main.C
-	@echo
+tdana: $(OBJ)
+	@echo " CC     $@"
+	${Q}$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
 
-FCATAnalysis.o: FCATAnalysis.C FCATAnalysis.h
-	$(CXX) $(CXXFLAGS) -c FCATAnalysis.C
-	@echo
+%.o: %.C
+	@echo " CC     $@"
+	${Q}$(CXX) $(CXXFLAGS) -c $<
 
-FCATcmsg.o: FCATcmsg.C FCATcmsg.h
-	$(CXX) $(CXXFLAGS) -c FCATcmsg.C
-	@echo
+AnaDict.C: $(HDRS)
+	@echo " DICT   $@"
+	${Q}$(ROOTSYS)/bin/rootcint -f $@ -c -p $(INCLUDES) $<
 
-AnaDict.o: FCATAnalysis.h FCATcmsg.h LinkDef.h AnaDict.C
-	$(CXX) $(CXXFLAGS) -c AnaDict.C
-	@echo
-
-AnaDict.C: FCATAnalysis.h FCATcmsg.h LinkDef.h
-	@echo "Generating Decoder Dictionary..."
-	$(ROOTSYS)/bin/rootcint -f AnaDict.C -c -p $(INCLUDES) FCATAnalysis.h FCATcmsg.h LinkDef.h
-	@echo
-
-libfcat.so: FCATAnalysis.o FCATcmsg.o AnaDict.o
-	$(CXX) -shared -O -o libfcat.so FCATAnalysis.o FCATcmsg.o  AnaDict.o \
-		$(LIBS)
-	@echo
 
 clean: 
-	rm -f *.o core fcat *~ AnaDict.{C,h} libfcat.so
+	rm -f *.{o,d} core *~ AnaDict.{C,h}
+
+%.d: %.C
+	@echo " DEP    $@"
+	@set -e; rm -f $@; \
+	$(CXX) -MM -shared $(INCLUDES) $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(DEPS)
