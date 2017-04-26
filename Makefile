@@ -19,6 +19,8 @@ CODALIBS = -L. -L$(CODALIB) -levio -levioxx -lexpat
 
 CODAINC  = ${CODA}/common/include
 
+ROOTSYS	?= /apps/root/5.34.36/root
+
 ROOTLIBS = $(shell ${ROOTSYS}/bin/root-config --libs)
 ROOTGLIBS = $(shell ${ROOTSYS}/bin/root-config --glibs)
 ROOTINC   = $(shell ${ROOTSYS}/bin/root-config --incdir)
