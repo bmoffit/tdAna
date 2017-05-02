@@ -14,7 +14,7 @@
 #include "TTree.h"
 
 #define MAXCHAN 16
-#define NROCS   1
+#define NROCS   4
 #define MAXBLOCKLEVEL 1
 
 using namespace std;
@@ -150,13 +150,20 @@ class Trigger:public TObject
 public:
   // TI Data
   ti_data fTI[NROCS];
-
+  // TD Fiber Data (max it out at 4 * blocklevel)
+  vector <td_fiber_data> fTD;
+  UInt_t eventNumber;
+  UInt_t eventType;
+  Long64_t timestamp;
+  
   Trigger()
   {
+    Clear();
     for (Int_t iroc = 0; iroc < NROCS; iroc++)
       {
       }
   }
+
   void Clear()
   {
 
@@ -164,6 +171,11 @@ public:
       {
 	fTI[iroc].Clear();
       }
+  }
+
+  void Init(int blocklevel)
+  {
+    fTD.reserve(4 * blocklevel);
   }
 
   ClassDef(Trigger, 2);
@@ -184,6 +196,7 @@ private:
 
   tdAnalysis(const tdAnalysis & fn);
   tdAnalysis & operator=(const tdAnalysis & fn);
+  void InitTrees();
   void Load(const uint32_t * buffer);
   void Decode();
   void DecodeTD(moduleBank *tdbank);
@@ -198,14 +211,14 @@ private:
   // Bank Info
   moduleBank *mBank[20];
 
-  UInt_t rocnames[NROCS];
+  vector <UInt_t> rocnames;
   Int_t debug;
   Int_t fCodaEvTag;
-  Int_t fBlocklevel;
+  UInt_t fBlocklevel;
   Int_t fRunNumber;
   Int_t fEventNumber;
-  Int_t fEventType;
-  Int_t fTimeStamp;
+  vector <UInt_t> fEventType;
+  vector <Long64_t> fTimeStamp;
   Int_t fEvLength;
   Int_t fPrevEvLength;
   Int_t fSyncFlag;
@@ -218,6 +231,7 @@ private:
   TTree *evTree;		// Event Tree
   TTree *bTree;			// Event Tree
   Int_t initialized;
+  Int_t initd_trees;
   UInt_t fEvType;
   UInt_t prev_eventNumber[NROCS];
   Long64_t prev_timestamp[NROCS];

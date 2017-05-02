@@ -9,7 +9,7 @@
 #include "evioUtil.hxx"
 #include "evioBankIndex.hxx"
 //#define PRINTOUT 
-#define DEBUG
+// #define DEBUGLOAD
 
 using namespace evio;
 
@@ -36,9 +36,9 @@ fPrevEvLength(0)
     }
 
   currentTrigger = aTrigger[0];
-  memset(&rocnames, 0, NROCS * sizeof(UInt_t));
-  rocnames[0] = 1;
+  rocnames.reserve(NROCS);
   initialized = 0;
+  initd_trees = 0;
   rocIndexFromNumber(0);
 };
 
@@ -67,40 +67,50 @@ tdAnalysis::Init(const int *buffer, int skip = 0)
     fRunNumber = buffer[3];
   // FIXME: Use prestart event to get some F1 configuration
 
-  TString fRootFileName = "ROOTfiles/fcat_";
+  TString fRootFileName = "ROOTfiles/tdAna_";
   fRootFileName += fRunNumber;
   fRootFileName += ".root";
 
   cout << "ROOT Output Filename: " << fRootFileName << endl;
 
-  evFile = new TFile(fRootFileName, "RECREATE", "FCAT ROOTfile");
+  evFile = new TFile(fRootFileName, "RECREATE", "TDANA ROOTfile");
 
-  evTree = new TTree("R", "event tree");
+  evTree = new TTree("E", "event tree");
 
-  // Event Number Branch
+  bTree = new TTree("B", "block tree");
+
+  initialized = 1;
+};
+
+
+// Need to know block level and number and names of ROCs
+
+void
+tdAnalysis::InitTrees()
+{
+  
+  // Event Tree
   evTree->Branch("ev_num", &fEventNumber, "ev_num/I");
+  evTree->Branch("Trigger", &currentTrigger);
 
+  // Block Tree
   for (UInt_t iroc = 0; iroc < NROCS; iroc++)
     {
       if (rocIndexFromNumber(rocnames[iroc]) != -1)
 	{
 	  evTree->Branch(Form("ti%d", rocnames[iroc]), &TI[iroc]);
 	  evTree->Branch("td", &TD);
-
 	}
       prev_timestamp[iroc] = 0;
       prev_eventNumber[iroc] = 0;
     }
 
-#ifdef DOBTREE
-  bTree = new TTree("B", "block tree");
-
   bTree->Branch("ev_num", &fEventNumber, "ev_num/I");
-  bTree->Branch("Trigger", &currentTrigger);
-#endif // DOBTREE
+
+  initd_trees = 1;
   
-  initialized = 1;
-};
+}
+
 
 void
 tdAnalysis::Process(const int *buffer)
@@ -131,6 +141,11 @@ tdAnalysis::Process(const int *buffer)
 void
 tdAnalysis::Load(const uint32_t * buffer)
 {
+  uint16_t tag = 0, content_type = 0;
+#ifdef DEBUGLOAD
+  uint16_t num = 0;
+#endif
+  
   bankmask = 0;
 
   // Coda event tag
@@ -140,7 +155,6 @@ tdAnalysis::Load(const uint32_t * buffer)
   for (int ibank = 0; ibank < 10; ibank++)
     mBank[ibank] = NULL;
 
-#define DEBUGLOAD
 #ifdef DEBUGLOAD
   printf("buffer[0] = 0x%08x\n", buffer[0]);
   printf("buffer[1] = 0x%08x\n", buffer[1]);
@@ -154,11 +168,11 @@ tdAnalysis::Load(const uint32_t * buffer)
   for (std::list < evioDOMNodeP >::const_iterator it = fullList->begin();
        it != fullList->end(); ++it)
     {
-      uint16_t tag = (*it)->tag;
-      uint8_t num = (*it)->num;
-      int content_type = (*it)->getContentType();
+      tag = (*it)->tag;
+      content_type = (*it)->getContentType();
 
 #ifdef DEBUGLOAD
+      num = (*it)->num;
       printf("TOP: type = 0x%x   tag = 0x%x  num = %d\n", content_type, tag, num);
 #endif // DEBUGLOAD
 
@@ -209,10 +223,10 @@ tdAnalysis::Load(const uint32_t * buffer)
 		 physList->begin(); itPhys != physList->end(); ++itPhys)
 	    {
 	      tag = (*itPhys)->tag;
-	      num = (*itPhys)->num;
 	      content_type = (*itPhys)->getContentType();
 
 #ifdef DEBUGLOAD
+	      num = (*itPhys)->num;
 	      printf("PHYS: tag = 0x%x  num = 0x%x   content_type = 0x%x\n",
 		     tag, num, content_type);
 #endif
@@ -241,7 +255,9 @@ tdAnalysis::Load(const uint32_t * buffer)
 			    const vector < uint64_t > *vec =
 			      (*itTrig)->getVector < uint64_t > ();
 			    fEventNumber = (Int_t) ((*vec)[0]);
-			    fTimeStamp = (Int_t) ((*vec)[1]);
+			    for(UInt_t i = 1; i < (*vec).size(); i++)
+			      fTimeStamp.push_back((*vec)[i]);
+
 			    break;
 			  }
 
@@ -252,15 +268,26 @@ tdAnalysis::Load(const uint32_t * buffer)
 #endif
 			    const vector < uint16_t > *vec =
 			      (*itTrig)->getVector < uint16_t > ();
-			    fEventType = (*vec)[0];
+			    fBlocklevel = (*vec).size();
+			    for(UInt_t i = 0; i < fBlocklevel; i++)
+			      fEventType.push_back((*vec)[i]);
 			    break;
 			  }
 
 			case 0x1:	// Extra TI data
+			  {
 #ifdef DEBUGLOAD
-			  printf(" extra TI data (ROC %d)\n", tag);
+			    printf(" extra TI data (ROC %d)\n", tag);
 #endif
+			    // Push the ROC numbers here, if the trees
+			    // are not initialized yet
+			    if(!initd_trees)
+			      {
+				rocnames.push_back(tag);
+			      }
+			    
 			    break;
+			  }
 
 			default:
 #ifdef DEBUGLOAD
@@ -279,35 +306,26 @@ tdAnalysis::Load(const uint32_t * buffer)
 		     fEventNumber, fTimeStamp, fEventType);
 #endif // DEBUGLOAD
 
-		  int iroc = 0, iev = 0;
-		  aTrigger[iev].Clear();
-
-		  aTrigger[iev].fTI[iroc].eventNumber = fEventNumber;
-		  aTrigger[iev].fTI[iroc].timestamp = fTimeStamp;
-
-		  aTrigger[iev].fTI[iroc].prev_eventNumber = prev_eventNumber[iroc];
-		  aTrigger[iev].fTI[iroc].prev_timestamp = prev_timestamp[iroc];
-
-		  if (aTrigger[iev].fTI[iroc].timestamp <
-		      aTrigger[iev].fTI[iroc].prev_timestamp)
-		    aTrigger[iev].fTI[iroc].rollover++;
-
-		  UInt_t trigdiff;
-
-		  if (fTimeStamp < prev_timestamp[iroc])
-		    trigdiff = ((1ULL) << 32) + prev_timestamp[iroc] - fTimeStamp;
-		  else
-		    trigdiff = fTimeStamp - prev_timestamp[iroc];
-
-		  trigdiff /= (fEventNumber - prev_eventNumber[iroc]);
-
-		  prev_eventNumber[iroc] = aTrigger[iev].fTI[iroc].eventNumber;
-		  prev_timestamp[iroc] = aTrigger[iev].fTI[iroc].timestamp;
-
+		  UInt_t iroc = 0, iev = 0;
+		  for(iroc = 0; iroc < rocnames.size(); iroc++)
+		    {
+		      for(iev = 0; iev < fBlocklevel; iev++)
+			{
+			  aTrigger[iev].Clear();
+			  
+			  aTrigger[iev].eventNumber = fEventNumber+iev;
+			  aTrigger[iev].timestamp = fTimeStamp[iev];
+			  aTrigger[iev].eventType = fEventType[iev];
+			  
+			}
+		    }
+		  
 		} // Trigger Bank
 
-	      if (content_type == 0x10)	// ROC 0
+	      if (content_type == 0x10)	// ROC Bank (of banks)
 		{
+		  // FIXME: Extract sync flag from tag here.
+		  
 #ifdef DEBUGLOAD
 		  printf(" ROC: tag = 0x%x Blocklevel = %d\n",
 			 tag, num);
@@ -316,12 +334,12 @@ tdAnalysis::Load(const uint32_t * buffer)
 		  for (std::list < evioDOMNodeP >::const_iterator itRoc =
 			 rocList->begin(); itRoc != rocList->end(); ++itRoc)
 		    {
-		      int bank_type = (*itRoc)->getContentType();
-		      fBlocklevel = (*itRoc)->num;
 		      int bank_tag = (*itRoc)->tag;
 #ifdef DEBUGLOAD
+		      num = (*itRoc)->num;
+		      int bank_type = (*itRoc)->getContentType();
 		      printf(" ROC:   bank_tag = 0x%x   type = %d   blocklevel = %d\n",
-			     bank_tag, bank_type, fBlocklevel);
+			     bank_tag, bank_type, num);
 #endif // DEBUGLOAD
 		      switch (bank_tag)
 			{
@@ -369,25 +387,7 @@ tdAnalysis::Load(const uint32_t * buffer)
       if (bi.tagNumExists(tn))
 	mBank[0xa] =
 	  (moduleBank *) (bi.getData < uint32_t > (tn, &len) - 2);
-#ifdef OLDBANKS
-      // FADC bank
-      tn = evioDictEntry(3, fBlocklevel);
-      if (bi.tagNumExists(tn))
-	mBank[3] =
-	  (moduleBank *) (bi.getData < uint32_t > (tn, &len) - 2);
 
-      // CTP bank
-      tn = evioDictEntry(6, fBlocklevel);
-      if (bi.tagNumExists(tn))
-	mBank[6] =
-	  (moduleBank *) (bi.getData < uint32_t > (tn, &len) - 2);
-
-      // Setup bank
-      tn = evioDictEntry(5, 0);
-      if (bi.tagNumExists(tn))
-	mBank[5] =
-	  (moduleBank *) (bi.getData < uint32_t > (tn, &len) - 2);
-#endif
 #ifdef DEBUGLOAD
       for (int ibank = 0; ibank < 8; ibank++)
 	{
@@ -436,7 +436,7 @@ tdAnalysis::Decode()
     {
       evTree->Fill();
 #ifdef DOBTREE
-      for(UInt_t iev=0; iev<blocklevel; iev++)
+      for(UInt_t iev=0; iev<fBlocklevel; iev++)
 	{
 	  currentTrigger = aTrigger[iev];
 	  bTree->Fill();
@@ -701,12 +701,6 @@ tdAnalysis::rocIndexFromNumber(int rocNumber)
 {
   static int initd = 0;
   static int rocIndex[NROCS];
-
-  //  rocnames[0] = 1
-  //  rocnames[1] = 5
-
-  //  rocIndex[1] = 0
-  //  rocIndex[5] = 1
 
   if (initd == 0)
     {
