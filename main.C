@@ -238,4 +238,6 @@ getFileName(int num)
 
   return fname;
 
+  // Hack to make the warning: unused variable from evioUtils.hxx go away.
+  cout << DataTypeNames[0] << endl;
 }

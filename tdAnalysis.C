@@ -84,7 +84,7 @@ tdAnalysis::Init(const int *buffer, int skip = 0)
     {
       if (rocIndexFromNumber(rocnames[iroc]) != -1)
 	{
-	  evTree->Branch(Form("tid%d", rocnames[iroc]), &TI[iroc]);
+	  evTree->Branch(Form("ti%d", rocnames[iroc]), &TI[iroc]);
 	  evTree->Branch("td", &TD);
 
 	}
@@ -159,7 +159,7 @@ tdAnalysis::Load(const uint32_t * buffer)
       int content_type = (*it)->getContentType();
 
 #ifdef DEBUGLOAD
-      printf("type = 0x%x   tag = 0x%x  num = %d\n", content_type, tag, num);
+      printf("TOP: type = 0x%x   tag = 0x%x  num = %d\n", content_type, tag, num);
 #endif // DEBUGLOAD
 
       if ((tag >= 0xFFD0) && (tag <= 0xFFDF))
@@ -204,136 +204,156 @@ tdAnalysis::Load(const uint32_t * buffer)
 #endif // DEBUGLOAD
 
 	  // loop over physics event banks here.
-	  it++;
-	  tag = (*it)->tag;
-	  num = (*it)->num;
-	  content_type = (*it)->getContentType();
+	  evioDOMNodeListP physList = (*it)->getChildren();
+	  for (std::list < evioDOMNodeP >::const_iterator itPhys =
+		 physList->begin(); itPhys != physList->end(); ++itPhys)
+	    {
+	      tag = (*itPhys)->tag;
+	      num = (*itPhys)->num;
+	      content_type = (*itPhys)->getContentType();
 
 #ifdef DEBUGLOAD
-	  printf("    tag = 0x%x  num = 0x%x   content_type = 0x%x\n",
-		 tag, num, content_type);
+	      printf("PHYS: tag = 0x%x  num = 0x%x   content_type = 0x%x\n",
+		     tag, num, content_type);
 #endif
 	  
-	  if ((tag >= 0xFF10) && (tag <= 0xFF4F))
-	    {
-	      /* Trigger Bank */
-
-#ifdef DEBUGLOAD
-	      printf("--- Trigger Bank ---\n");
-#endif // DEBUGLOAD
-
-	      evioDOMNodeListP trigList = (*it)->getChildren();
-	      for (std::list < evioDOMNodeP >::const_iterator itChild =
-		     trigList->begin(); itChild != trigList->end(); ++itChild)
+	      if ((tag >= 0xFF10) && (tag <= 0xFF4F))
 		{
-		  int child_type = (*itChild)->getContentType();
-#ifdef DEBUGLOAD
-		  printf("   child_type = 0x%x\n", child_type);
-#endif // DEBUGLOAD
-		  switch (child_type)
+		  /* Trigger Bank */
+
+		  evioDOMNodeListP trigList = (*itPhys)->getChildren();
+		  for (std::list < evioDOMNodeP >::const_iterator itTrig =
+			 trigList->begin(); itTrig != trigList->end(); ++itTrig)
 		    {
-		    case 0xa:	// Event Number/Timestamp
-		      {
-			const vector < uint64_t > *vec =
-			  (*itChild)->getVector < uint64_t > ();
-			fEventNumber = (Int_t) ((*vec)[0]);
-			fTimeStamp = (Int_t) ((*vec)[1]);
-			break;
-		      }
-
-		    case 0x5:	// Event types
-		      {
-			const vector < uint16_t > *vec =
-			  (*itChild)->getVector < uint16_t > ();
-			fEventType = (*vec)[0];
-			break;
-		      }
-
-		    case 0x1:	// Extra TI data
-		      break;
-
-		    default:
-		      printf("%s: ERROR: Unknown data type %d for tag=0x%04x\n",
-			     __func__, child_type, tag);
-		    }
-		  it++;
-		}
+		      int child_type = (*itTrig)->getContentType();
+		      tag = (*itTrig)->tag;
 #ifdef DEBUGLOAD
-	      printf
-		(" fEventNumber = 0x%x   fTimeStamp = 0x%x  fEventType = 0x%x\n",
-		 fEventNumber, fTimeStamp, fEventType);
+		      printf(" TRIG: tag = 0x%x child_type = 0x%x .. ",
+			     tag, child_type);
+#endif // DEBUGLOAD
+		      switch (child_type)
+			{
+			case 0xa:	// Event Number/Timestamp
+			  {
+#ifdef DEBUGLOAD
+			    printf(" eventnumber + timestamps\n");
+#endif
+			    const vector < uint64_t > *vec =
+			      (*itTrig)->getVector < uint64_t > ();
+			    fEventNumber = (Int_t) ((*vec)[0]);
+			    fTimeStamp = (Int_t) ((*vec)[1]);
+			    break;
+			  }
+
+			case 0x5:	// Event types
+			  {
+#ifdef DEBUGLOAD
+			    printf(" event types\n");
+#endif
+			    const vector < uint16_t > *vec =
+			      (*itTrig)->getVector < uint16_t > ();
+			    fEventType = (*vec)[0];
+			    break;
+			  }
+
+			case 0x1:	// Extra TI data
+#ifdef DEBUGLOAD
+			  printf(" extra TI data (ROC %d)\n", tag);
+#endif
+			    break;
+
+			default:
+#ifdef DEBUGLOAD
+			  printf(" unknown\n");
+#endif
+			  printf("%s: ERROR: Unknown data type %d for tag=0x%04x\n",
+				 __func__, child_type, tag);
+			}
+
+		      it++; 
+		    } // TRIG Banks
+
+#ifdef DEBUGLOAD
+		  printf
+		    (" TRIG: fEventNumber = 0x%x   fTimeStamp = 0x%x  fEventType = 0x%x\n",
+		     fEventNumber, fTimeStamp, fEventType);
 #endif // DEBUGLOAD
 
-	      int iroc = 0, iev = 0;
-	      aTrigger[iev].Clear();
+		  int iroc = 0, iev = 0;
+		  aTrigger[iev].Clear();
 
-	      aTrigger[iev].fTI[iroc].eventNumber = fEventNumber;
-	      aTrigger[iev].fTI[iroc].timestamp = fTimeStamp;
+		  aTrigger[iev].fTI[iroc].eventNumber = fEventNumber;
+		  aTrigger[iev].fTI[iroc].timestamp = fTimeStamp;
 
-	      aTrigger[iev].fTI[iroc].prev_eventNumber = prev_eventNumber[iroc];
-	      aTrigger[iev].fTI[iroc].prev_timestamp = prev_timestamp[iroc];
+		  aTrigger[iev].fTI[iroc].prev_eventNumber = prev_eventNumber[iroc];
+		  aTrigger[iev].fTI[iroc].prev_timestamp = prev_timestamp[iroc];
 
-	      if (aTrigger[iev].fTI[iroc].timestamp <
-		  aTrigger[iev].fTI[iroc].prev_timestamp)
-		aTrigger[iev].fTI[iroc].rollover++;
+		  if (aTrigger[iev].fTI[iroc].timestamp <
+		      aTrigger[iev].fTI[iroc].prev_timestamp)
+		    aTrigger[iev].fTI[iroc].rollover++;
 
-	      UInt_t trigdiff;
+		  UInt_t trigdiff;
 
-	      if (fTimeStamp < prev_timestamp[iroc])
-		trigdiff = ((1ULL) << 32) + prev_timestamp[iroc] - fTimeStamp;
-	      else
-		trigdiff = fTimeStamp - prev_timestamp[iroc];
+		  if (fTimeStamp < prev_timestamp[iroc])
+		    trigdiff = ((1ULL) << 32) + prev_timestamp[iroc] - fTimeStamp;
+		  else
+		    trigdiff = fTimeStamp - prev_timestamp[iroc];
 
-	      trigdiff /= (fEventNumber - prev_eventNumber[iroc]);
+		  trigdiff /= (fEventNumber - prev_eventNumber[iroc]);
 
-	      prev_eventNumber[iroc] = aTrigger[iev].fTI[iroc].eventNumber;
-	      prev_timestamp[iroc] = aTrigger[iev].fTI[iroc].timestamp;
+		  prev_eventNumber[iroc] = aTrigger[iev].fTI[iroc].eventNumber;
+		  prev_timestamp[iroc] = aTrigger[iev].fTI[iroc].timestamp;
 
-	    }
+		} // Trigger Bank
 
-	  if (content_type == 0x10)	// ROC 0
-	    {
-#ifdef DEBUGLOAD
-	      printf(" tag = 0x%x num = %d\n",
-		     tag, num);
-#endif // DEBUGLOAD
-	      evioDOMNodeListP rocList = (*it)->getChildren();
-	      for (std::list < evioDOMNodeP >::const_iterator itRoc =
-		     rocList->begin(); itRoc != rocList->end(); ++itRoc)
+	      if (content_type == 0x10)	// ROC 0
 		{
-		  int bank_type = (*itRoc)->getContentType();
-		  fBlocklevel = (*itRoc)->num;
-		  int bank_tag = (*itRoc)->tag;
 #ifdef DEBUGLOAD
-		  printf("   bank_tag = 0x%x   type = %d   blocklevel = %d\n",
-			 bank_tag, bank_type, fBlocklevel);
+		  printf(" ROC: tag = 0x%x Blocklevel = %d\n",
+			 tag, num);
 #endif // DEBUGLOAD
-		  switch (bank_tag)
+		  evioDOMNodeListP rocList = (*itPhys)->getChildren();
+		  for (std::list < evioDOMNodeP >::const_iterator itRoc =
+			 rocList->begin(); itRoc != rocList->end(); ++itRoc)
 		    {
-		    case 0x1:	// misc
-		    case 0x3:	// fADC250
-		    case 0x5:	// stats
-		    case 0x6:	// CTP
-		      {
-			bankmask |= (1 << bank_tag);
-			break;
-		      }
-		    case 0x0a:     // TD
-		      {
-			bankmask |= (1 << bank_tag);
-			break;
-		      }
-		    default:
-		      printf("%s: ERROR: Unknown bank 0x%04x\n",
-			     __func__, bank_tag);
-		    }
-		  it++;
-		}
-	    }
-      
-	}
+		      int bank_type = (*itRoc)->getContentType();
+		      fBlocklevel = (*itRoc)->num;
+		      int bank_tag = (*itRoc)->tag;
+#ifdef DEBUGLOAD
+		      printf(" ROC:   bank_tag = 0x%x   type = %d   blocklevel = %d\n",
+			     bank_tag, bank_type, fBlocklevel);
+#endif // DEBUGLOAD
+		      switch (bank_tag)
+			{
+			case 0x1:	// misc
+			case 0x3:	// fADC250
+			case 0x5:	// stats
+			case 0x6:	// CTP
+			  {
+			    bankmask |= (1 << bank_tag);
+			    break;
+			  }
+			case 0x0a:     // TD
+			  {
+			    bankmask |= (1 << bank_tag);
+			    break;
+			  }
+			default:
+			  printf("%s: ERROR: Unknown bank 0x%04x\n",
+				 __func__, bank_tag);
+			}
 
-    }
+		    }
+
+		  it++;
+		} // ROC Bank
+
+	      it++;
+	    } // Physics Banks
+
+	  it++;
+	} // Physics Event
+    } // TOP level
 
 
   // if (IsPhysicsEvent())
@@ -369,7 +389,6 @@ tdAnalysis::Load(const uint32_t * buffer)
 	  (moduleBank *) (bi.getData < uint32_t > (tn, &len) - 2);
 #endif
 #ifdef DEBUGLOAD
-      int ibank;
       for (int ibank = 0; ibank < 8; ibank++)
 	{
 	  if (mBank[ibank])
@@ -437,7 +456,7 @@ tdAnalysis::DecodeTD(moduleBank *tdbank)
 {
   UInt_t iword=0, data=0;
   td_fiber_word_t tdword;
-  int blkrec = 0;
+
   
   TD->Clear();
   
@@ -493,7 +512,7 @@ tdAnalysis::DecodeTD(moduleBank *tdbank)
 
       if(tdword.bf.block_received)
 	{
-	  blkrec = 1;
+
 	  TD->block_received_cnt++;
 	}
 
@@ -506,7 +525,7 @@ tdAnalysis::DecodeTD(moduleBank *tdbank)
       printf("%8d: 0x%08x  timestamp = 0x%04x  %s\n",
 	     iword, data, tdword.bf.timestamp, blkrec?"*":" ");
 #endif
-      blkrec = 0;
+
       iword++;
     }
 

@@ -129,18 +129,9 @@ public:
   UInt_t blockHeader2;
   UInt_t blockTrailer;
 
-  UInt_t busy_cnt;
-  UInt_t trg_ack_cnt;
-  UInt_t sync_reset_req_cnt;
-  UInt_t not_sync_reset_req_cnt;
-  UInt_t busy2_cnt;
-  UInt_t trig1_ack_cnt;
-  UInt_t trig2_ack_cnt;
-  UInt_t block_received_cnt;
-  UInt_t readout_ack_cnt;
-  
   ti_block_data()
   {
+    Clear();
   }
   void Clear()
   {
