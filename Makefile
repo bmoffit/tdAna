@@ -13,7 +13,7 @@ endif
 CXX = g++ -std=c++11
 OSNAME = Linux
 
-CODA     = /daqfs/coda/3.06
+CODA     = /daqfs/coda/3.07
 CODALIB  = ${CODA}/Linux-x86_64/lib
 CODALIBS = -L. -L$(CODALIB) -levio -levioxx -lexpat
 
@@ -39,33 +39,37 @@ else
 CXXFLAGS += -O3
 endif
 
-SRC	:= $(wildcard *.C)
-OBJ	= $(SRC:.C=.o)
-SRC	:= $(filter-out AnaDict.C, $(SRC))
+SRC	= $(filter-out AnaDict.C, $(wildcard *.C))
+OBJ	= $(SRC:.C=.o) AnaDict.o
 DEPS	= $(SRC:.C=.d)
-HDRS	= $(wildcard *.h)
+HDRS	= $(filter-out AnaDict.h, $(wildcard *.h))
 
-all: tdana
+all: tdana 
 
-tdana: $(OBJ)
+tdana: ${OBJ}
 	@echo " CC     $@"
-	${Q}$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
+	${Q}$(CXX) $(CXXFLAGS) -o $@ ${OBJ} $(LIBS)
 
 %.o: %.C
 	@echo " CC     $@"
 	${Q}$(CXX) $(CXXFLAGS) -c $<
 
-AnaDict.C: $(HDRS)
+AnaDict.C: ${HDRS}
 	@echo " DICT   $@"
-	${Q}$(ROOTSYS)/bin/rootcint -f $@ -c -p $(INCLUDES) $<
+	${Q}$(ROOTSYS)/bin/rootcint -f $@ -c -p $(INCLUDES) ${HDRS}
 
 
 clean: 
-	rm -f *.{o,d} core *~ AnaDict.{C,h}
+	rm -f *.{o,d} *.d.* core *~ AnaDict.{C,h}
+
+show:
+	@echo " SRC  = $(SRC)"
+	@echo " OBJ  = $(OBJ)"
+	@echo " HDRS = $(HDRS)"
 
 %.d: %.C
 	@echo " DEP    $@"
-	@set -e; rm -f $@; \
+	@set -e; rm -f $@ $@.*; \
 	$(CXX) -MM -shared $(INCLUDES) $< > $@.$$$$; \
 	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
 	rm -f $@.$$$$

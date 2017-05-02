@@ -10,7 +10,7 @@
 #include "TROOT.h"
 #include "TRint.h"
 #include "TString.h"
-#include "FCATAnalysis.h"
+#include "tdAnalysis.h"
 
 using namespace evio;
 using namespace std;
@@ -23,7 +23,7 @@ main(int argc, char *argv[])
 {
 
   evioFileChannel *chan;
-  TROOT myana("fcat", "FCAT Analysis");
+  TROOT myana("fcat", "td Analysis");
   TString filename;
   int runnum = 0;
   char *cfilename;
@@ -108,7 +108,7 @@ SKIPARGS:
     }
 
 
-  FCATAnalysis *analysis = new FCATAnalysis(debugchoice);	// Analysis
+  tdAnalysis *analysis = new tdAnalysis(debugchoice);	// Analysis
 
   cout << "CODA Data Filename: " << filename << endl;
 
