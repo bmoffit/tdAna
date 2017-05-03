@@ -37,9 +37,10 @@ fPrevEvLength(0)
 
   currentTrigger = aTrigger[0];
   rocnames.reserve(NROCS);
+  fTimeStamp.reserve(MAXBLOCKLEVEL);
+  fEventType.reserve(MAXBLOCKLEVEL);
   initialized = 0;
   initd_trees = 0;
-  rocIndexFromNumber(0);
 };
 
 tdAnalysis::~tdAnalysis()
@@ -75,7 +76,10 @@ tdAnalysis::Init(const int *buffer, int skip = 0)
 
   evFile = new TFile(fRootFileName, "RECREATE", "TDANA ROOTfile");
 
+#ifdef DOETREE
   evTree = new TTree("E", "event tree");
+#endif
+  
 
   bTree = new TTree("B", "block tree");
 
@@ -89,23 +93,26 @@ void
 tdAnalysis::InitTrees()
 {
   
-  // Event Tree
-  evTree->Branch("ev_num", &fEventNumber, "ev_num/I");
-  evTree->Branch("Trigger", &currentTrigger);
-
   // Block Tree
   for (UInt_t iroc = 0; iroc < NROCS; iroc++)
     {
       if (rocIndexFromNumber(rocnames[iroc]) != -1)
 	{
-	  evTree->Branch(Form("ti%d", rocnames[iroc]), &TI[iroc]);
-	  evTree->Branch("td", &TD);
+	  bTree->Branch(Form("ti%d", rocnames[iroc]), &TI[iroc]);
+	  bTree->Branch("td", &TD);
 	}
       prev_timestamp[iroc] = 0;
       prev_eventNumber[iroc] = 0;
     }
 
-  bTree->Branch("ev_num", &fEventNumber, "ev_num/I");
+  bTree->Branch("event_number", &fEventNumber, "event_number/I");
+
+#ifdef DOETREE
+  // Event Tree
+  evTree->Branch("event_number", &fEventNumber, "event_number/I");
+  evTree->Branch("Trigger", &currentTrigger);
+#endif
+  
 
   initd_trees = 1;
   
@@ -255,8 +262,9 @@ tdAnalysis::Load(const uint32_t * buffer)
 			    const vector < uint64_t > *vec =
 			      (*itTrig)->getVector < uint64_t > ();
 			    fEventNumber = (Int_t) ((*vec)[0]);
+
 			    for(UInt_t i = 1; i < (*vec).size(); i++)
-			      fTimeStamp.push_back((*vec)[i]);
+			      fTimeStamp[i-1] = (*vec)[i];
 
 			    break;
 			  }
@@ -269,8 +277,9 @@ tdAnalysis::Load(const uint32_t * buffer)
 			    const vector < uint16_t > *vec =
 			      (*itTrig)->getVector < uint16_t > ();
 			    fBlocklevel = (*vec).size();
+
 			    for(UInt_t i = 0; i < fBlocklevel; i++)
-			      fEventType.push_back((*vec)[i]);
+			      fEventType[i] = (*vec)[i];
 			    break;
 			  }
 
@@ -302,22 +311,29 @@ tdAnalysis::Load(const uint32_t * buffer)
 
 #ifdef DEBUGLOAD
 		  printf
-		    (" TRIG: fEventNumber = 0x%x   fTimeStamp = 0x%x  fEventType = 0x%x\n",
-		     fEventNumber, fTimeStamp, fEventType);
+		    (" TRIG: fEventNumber = 0x%x   fTimeStamp = 0x%llx  fEventType = 0x%x \n",
+		     fEventNumber, fTimeStamp[0], fEventType[0]);
 #endif // DEBUGLOAD
 
-		  UInt_t iroc = 0, iev = 0;
-		  for(iroc = 0; iroc < rocnames.size(); iroc++)
+		  if(!initd_trees)
 		    {
-		      for(iev = 0; iev < fBlocklevel; iev++)
+		      if(rocnames.size() == 0)
 			{
-			  aTrigger[iev].Clear();
-			  
-			  aTrigger[iev].eventNumber = fEventNumber+iev;
-			  aTrigger[iev].timestamp = fTimeStamp[iev];
-			  aTrigger[iev].eventType = fEventType[iev];
-			  
+			  printf("%s: ERROR: No ROC numbers obtained\n",
+				 __func__);
 			}
+		      else
+			InitTrees();
+		    }
+		  
+		  for(UInt_t iev = 0; iev < fBlocklevel; iev++)
+		    {
+		      aTrigger[iev].Clear();
+		      
+		      aTrigger[iev].eventNumber = fEventNumber+iev;
+		      aTrigger[iev].timestamp = fTimeStamp[iev];
+		      aTrigger[iev].eventType = fEventType[iev];
+		      
 		    }
 		  
 		} // Trigger Bank
@@ -338,7 +354,7 @@ tdAnalysis::Load(const uint32_t * buffer)
 #ifdef DEBUGLOAD
 		      num = (*itRoc)->num;
 		      int bank_type = (*itRoc)->getContentType();
-		      printf(" ROC:   bank_tag = 0x%x   type = %d   blocklevel = %d\n",
+		      printf("  BANK:  tag = 0x%x   type = %d   blocklevel = %d\n",
 			     bank_tag, bank_type, num);
 #endif // DEBUGLOAD
 		      switch (bank_tag)
@@ -434,13 +450,13 @@ tdAnalysis::Decode()
 
   if (foundData)
     {
-      evTree->Fill();
-#ifdef DOBTREE
+      bTree->Fill();
+      
+#ifdef DOETREE
       for(UInt_t iev=0; iev<fBlocklevel; iev++)
 	{
 	  currentTrigger = aTrigger[iev];
-	  bTree->Fill();
-	  //      bTree->ResetBranchAddresses();
+	  evTree->Fill();
 	}
 #endif
       foundData = kFALSE;
@@ -455,7 +471,7 @@ void
 tdAnalysis::DecodeTD(moduleBank *tdbank)
 {
   UInt_t iword=0, data=0;
-  td_fiber_word_t tdword;
+  td_fiber_data tdword;
 
   
   TD->Clear();
@@ -468,62 +484,65 @@ tdAnalysis::DecodeTD(moduleBank *tdbank)
       data = bswap_32(data);
 #endif
 
-      tdword.raw = data;
+      tdword.SetRaw(data);
 #ifdef DEBUGTD
       printf("%8d: 0x%08x  timestamp = 0x%04x\n",
-	     iword, data, tdword.bf.timestamp);
+	     iword, data, tdword.timestamp);
 #endif // DEBUGTD
 
+      TD->fTD.push_back(tdword);
+
+      
       /* Bump counters, according to set bits */
-      if(tdword.bf.busy)
+      if(tdword.busy)
 	{
 	  TD->busy_cnt++;
 	}
 
-      if(tdword.bf.trg_ack)
+      if(tdword.trg_ack)
 	{
 	  TD->trg_ack_cnt++;
 	}
       
-      if(tdword.bf.sync_reset_req)
+      if(tdword.sync_reset_req)
 	{
 	  TD->sync_reset_req_cnt++;
 	}
 
-      if(tdword.bf.not_sync_reset_req)
+      if(tdword.not_sync_reset_req)
 	{
 	  TD->not_sync_reset_req_cnt++;
 	}
 
-      if(tdword.bf.busy2)
+      if(tdword.busy2)
 	{
 	  TD->busy2_cnt++;
 	}
 
-      if(tdword.bf.trig1_ack)
+      if(tdword.trig1_ack)
 	{
 	  TD->trig1_ack_cnt++;
 	}
 
-      if(tdword.bf.trig2_ack)
+      if(tdword.trig2_ack)
 	{
 	  TD->trig2_ack_cnt++;
 	}
 
-      if(tdword.bf.block_received)
+      if(tdword.block_received)
 	{
 
 	  TD->block_received_cnt++;
 	}
 
-      if(tdword.bf.readout_ack)
+      if(tdword.readout_ack)
 	{
 	  TD->readout_ack_cnt++;
 	}
 
 #ifdef DEBUGTD
       printf("%8d: 0x%08x  timestamp = 0x%04x  %s\n",
-	     iword, data, tdword.bf.timestamp, blkrec?"*":" ");
+	     iword, data, tdword.timestamp, blkrec?"*":" ");
 #endif
 
       iword++;
@@ -704,6 +723,11 @@ tdAnalysis::rocIndexFromNumber(int rocNumber)
 
   if (initd == 0)
     {
+      if(rocnames.size() == 0)
+	{
+	  printf("%s: rocnames size == 0\n",
+		 __func__);
+	}
       // Go through and make the reverse map
       for (UInt_t index = 0; index < NROCS; index++)
 	{

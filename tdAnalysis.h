@@ -15,7 +15,7 @@
 
 #define MAXCHAN 16
 #define NROCS   4
-#define MAXBLOCKLEVEL 1
+#define MAXBLOCKLEVEL 256
 
 using namespace std;
 
@@ -57,32 +57,68 @@ public:
   ClassDef(ti_data, 2);
 };
 
-typedef struct
-{
-  uint16_t undef:3;              // bits(2:0)
-  uint16_t readout_ack:1;        // 3
-  uint16_t block_received:1;     // 4
-  uint16_t trig2_ack:1;          // 5
-  uint16_t trig1_ack:1;          // 6
-  uint16_t busy2:1;              // 7
-  uint16_t not_sync_reset_req:1; // 8
-  uint16_t sync_reset_req:1;     // 9
-  uint16_t trg_ack:1;            // 10
-  uint16_t busy:1;               // 11
-  uint16_t header:4;             // bits(15:12)
-  uint16_t timestamp:16;         // bits(31:16)
-} td_fiber_word;
-
-typedef union
-{
-  uint32_t raw;
-  td_fiber_word bf;
-} td_fiber_word_t;
 
 class td_fiber_data:public TObject
 {
+  
 public:
-  td_fiber_word_t data;
+
+  uint16_t readout_ack;
+  uint16_t block_received;
+  uint16_t trig2_ack;
+  uint16_t trig1_ack;
+  uint16_t busy2;
+  uint16_t not_sync_reset_req;
+  uint16_t sync_reset_req;
+  uint16_t trg_ack;
+  uint16_t busy;
+  uint16_t header;
+  uint16_t timestamp;
+  uint32_t raw;
+
+  td_fiber_data()
+    {
+      raw = 0;
+    }
+
+  void SetRaw(uint32_t b)
+    {
+      struct td_fiber_word
+      {
+	uint16_t undef:3;              // bits(2:0)
+	uint16_t readout_ack:1;        // 3
+	uint16_t block_received:1;     // 4
+	uint16_t trig2_ack:1;          // 5
+	uint16_t trig1_ack:1;          // 6
+	uint16_t busy2:1;              // 7
+	uint16_t not_sync_reset_req:1; // 8
+	uint16_t sync_reset_req:1;     // 9
+	uint16_t trg_ack:1;            // 10
+	uint16_t busy:1;               // 11
+	uint16_t header:4;             // bits(15:12)
+	uint16_t timestamp:16;         // bits(31:16)
+      };
+      
+      union flub
+      {
+	struct td_fiber_word bf1;
+	uint32_t rrr;
+      } uni;
+
+      uni.rrr = b;
+      raw = uni.rrr;
+      readout_ack = uni.bf1.readout_ack;
+      block_received = uni.bf1.block_received;
+      trig2_ack = uni.bf1.trig2_ack;
+      trig1_ack = uni.bf1.trig1_ack;
+      busy2 = uni.bf1.busy2;
+      not_sync_reset_req = uni.bf1.not_sync_reset_req;
+      sync_reset_req = uni.bf1.sync_reset_req;
+      busy = uni.bf1.busy;
+      header = uni.bf1.header;
+      timestamp = uni.bf1.timestamp;
+      
+    }
 
   ClassDef(td_fiber_data, 2);
 };
@@ -99,10 +135,12 @@ public:
   UInt_t trig2_ack_cnt;
   UInt_t block_received_cnt;
   UInt_t readout_ack_cnt;
+  vector <td_fiber_data> fTD;
   
   td_block_data()
   {
     Clear();
+    fTD.reserve(4 * MAXBLOCKLEVEL);
   }
 
   void Clear()
@@ -116,6 +154,7 @@ public:
     trig2_ack_cnt = 0;
     block_received_cnt = 0;
     readout_ack_cnt = 0;
+    fTD.clear();
   }
 
 
@@ -151,7 +190,6 @@ public:
   // TI Data
   ti_data fTI[NROCS];
   // TD Fiber Data (max it out at 4 * blocklevel)
-  vector <td_fiber_data> fTD;
   UInt_t eventNumber;
   UInt_t eventType;
   Long64_t timestamp;
@@ -175,7 +213,6 @@ public:
 
   void Init(int blocklevel)
   {
-    fTD.reserve(4 * blocklevel);
   }
 
   ClassDef(Trigger, 2);
