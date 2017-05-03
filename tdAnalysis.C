@@ -99,11 +99,11 @@ tdAnalysis::InitTrees()
       if (rocIndexFromNumber(rocnames[iroc]) != -1)
 	{
 	  bTree->Branch(Form("ti%d", rocnames[iroc]), &TI[iroc]);
-	  bTree->Branch("td", &TD);
 	}
       prev_timestamp[iroc] = 0;
       prev_eventNumber[iroc] = 0;
     }
+  bTree->Branch("td", &TD);
 
   bTree->Branch("event_number", &fEventNumber, "event_number/I");
 
@@ -721,6 +721,8 @@ tdAnalysis::rocIndexFromNumber(int rocNumber)
   static int initd = 0;
   static int rocIndex[NROCS];
 
+  // NEED to fix this to include ROC 0
+  
   if (initd == 0)
     {
       if(rocnames.size() == 0)
