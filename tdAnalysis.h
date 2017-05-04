@@ -164,19 +164,21 @@ public:
 class ti_block_data:public TObject
 {
 public:
-  UInt_t blockHeader1;
-  UInt_t blockHeader2;
-  UInt_t blockTrailer;
+  UInt_t eventNumber;
+  vector <UInt_t> eventType;
+  vector <Long64_t> timestamp;
 
   ti_block_data()
   {
+    eventType.reserve(MAXBLOCKLEVEL);
+    timestamp.reserve(MAXBLOCKLEVEL);
     Clear();
   }
   void Clear()
   {
-    blockHeader1 = 0;
-    blockHeader2 = 0;
-    blockTrailer = 0;
+    eventNumber = 0;
+    eventType.clear();
+    timestamp.clear();
   }
 
 
@@ -261,6 +263,7 @@ private:
   Int_t fSyncFlag;
   UInt_t bankmask;
 
+  ti_block_data *Trig;
   ti_block_data *TI;
   td_block_data *TD;
   

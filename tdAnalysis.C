@@ -23,6 +23,7 @@ fPrevEvLength(0)
 #ifdef DEBUG
   cout << "tdAnalysis::tdAnalysis()" << endl;
 #endif
+  Trig = new ti_block_data;
   TI = new ti_block_data[NROCS];
   TD  = new td_block_data;
 
@@ -103,6 +104,7 @@ tdAnalysis::InitTrees()
       prev_timestamp[iroc] = 0;
       prev_eventNumber[iroc] = 0;
     }
+  bTree->Branch("trig", &Trig);
   bTree->Branch("td", &TD);
 
   bTree->Branch("event_number", &fEventNumber, "event_number/I");
@@ -219,7 +221,9 @@ tdAnalysis::Load(const uint32_t * buffer)
       else if ((tag >= 0xFF50) && (tag <= 0xFF8F))
 	{
 	  /* Physics Event */
+	  Trig->Clear();
 
+	  
 #ifdef DEBUGLOAD
 	  printf("\n********** PHYSICS Event **********\n");
 #endif // DEBUGLOAD
@@ -262,9 +266,13 @@ tdAnalysis::Load(const uint32_t * buffer)
 			    const vector < uint64_t > *vec =
 			      (*itTrig)->getVector < uint64_t > ();
 			    fEventNumber = (Int_t) ((*vec)[0]);
-
+			    Trig->eventNumber = fEventNumber;
+			    
 			    for(UInt_t i = 1; i < (*vec).size(); i++)
-			      fTimeStamp[i-1] = (*vec)[i];
+			      {
+				Trig->timestamp.push_back((*vec)[i]);
+				fTimeStamp[i-1] = (*vec)[i];
+			      }
 
 			    break;
 			  }
@@ -279,7 +287,10 @@ tdAnalysis::Load(const uint32_t * buffer)
 			    fBlocklevel = (*vec).size();
 
 			    for(UInt_t i = 0; i < fBlocklevel; i++)
-			      fEventType[i] = (*vec)[i];
+			      {
+				Trig->eventType.push_back((*vec)[i]);
+				fEventType[i] = (*vec)[i];
+			      }
 			    break;
 			  }
 
@@ -721,8 +732,6 @@ tdAnalysis::rocIndexFromNumber(int rocNumber)
   static int initd = 0;
   static int rocIndex[NROCS];
 
-  // NEED to fix this to include ROC 0
-  
   if (initd == 0)
     {
       if(rocnames.size() == 0)
@@ -730,15 +739,17 @@ tdAnalysis::rocIndexFromNumber(int rocNumber)
 	  printf("%s: rocnames size == 0\n",
 		 __func__);
 	}
+
+      // Initialize index;
+      memset(&rocIndex, -1, sizeof(rocIndex));
+
       // Go through and make the reverse map
       for (UInt_t index = 0; index < NROCS; index++)
 	{
-	  rocIndex[index] = -1;
-	}
-      for (UInt_t index = 0; index < NROCS; index++)
-	{
-	  if (rocnames[index])
-	    rocIndex[rocnames[index]] = index;
+	  if(index < rocnames.size())
+	    {
+	      rocIndex[rocnames[index]] = index;
+	    }
 	}
       initd = 1;
     }

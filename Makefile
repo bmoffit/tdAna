@@ -40,11 +40,12 @@ CXXFLAGS += -O3
 endif
 
 SRC	= $(filter-out AnaDict.C, $(wildcard *.C))
+SRC	:= $(filter-out rootlogon.C, $(SRC))
 OBJ	= $(SRC:.C=.o) AnaDict.o
 DEPS	= $(SRC:.C=.d)
 HDRS	= $(filter-out AnaDict.h, $(wildcard *.h))
 
-all: tdana 
+all: tdana libtdana.so
 
 tdana: ${OBJ}
 	@echo " CC     $@"
@@ -54,10 +55,13 @@ tdana: ${OBJ}
 	@echo " CC     $@"
 	${Q}$(CXX) $(CXXFLAGS) -c $<
 
-AnaDict.C: ${HDRS}
+AnaDict.C: ${HDRS} 
 	@echo " DICT   $@"
-	${Q}$(ROOTSYS)/bin/rootcint -f $@ -c -p $(INCLUDES) ${HDRS}
+	${Q}$(ROOTSYS)/bin/rootcint -f $@ -c -p $(INCLUDES) ${HDRS} 
 
+libtdana.so: AnaDict.C ${filter-out main.C, ${SRC}}
+	@echo " CC     $@"
+	${Q}$(CXX) $(CXXFLAGS) -fpic -shared -o $@ ${LIBS} $^
 
 clean: 
 	rm -f *.{o,d} *.d.* core *~ AnaDict.{C,h}
