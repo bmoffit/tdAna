@@ -135,12 +135,12 @@ public:
   UInt_t trig2_ack_cnt;
   UInt_t block_received_cnt;
   UInt_t readout_ack_cnt;
-  vector <td_fiber_data> fTD;
+  vector <td_fiber_data> decoded;
   
   td_block_data()
   {
     Clear();
-    fTD.reserve(4 * MAXBLOCKLEVEL);
+    decoded.reserve(4 * MAXBLOCKLEVEL);
   }
 
   void Clear()
@@ -154,7 +154,7 @@ public:
     trig2_ack_cnt = 0;
     block_received_cnt = 0;
     readout_ack_cnt = 0;
-    fTD.clear();
+    decoded.clear();
   }
 
 

@@ -97,10 +97,12 @@ tdAnalysis::InitTrees()
   // Block Tree
   for (UInt_t iroc = 0; iroc < NROCS; iroc++)
     {
+#ifdef ROCTIBRANCHES
       if (rocIndexFromNumber(rocnames[iroc]) != -1)
 	{
 	  bTree->Branch(Form("ti%d", rocnames[iroc]), &TI[iroc]);
 	}
+#endif // ROCTIBRANCHES
       prev_timestamp[iroc] = 0;
       prev_eventNumber[iroc] = 0;
     }
@@ -501,7 +503,7 @@ tdAnalysis::DecodeTD(moduleBank *tdbank)
 	     iword, data, tdword.timestamp);
 #endif // DEBUGTD
 
-      TD->fTD.push_back(tdword);
+      TD->decoded.push_back(tdword);
 
       
       /* Bump counters, according to set bits */
